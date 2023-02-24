@@ -1,0 +1,164 @@
+---
+title: "Clustering_Tertullien"
+author: "Mathilde Schwoerer"
+date: "2023-01-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Ce notebook s'inspire beaucoup du script fourni par notre enseignant : [Github](https://github.com/gabays).
+
+I - Préparation des données et de la session de travail 
+
+Nous avons au préalable téléchargé tous les textes de Tertullien sous forme de fichiers .xml et les avons enregistrés dans un dossier intitulé 'corpus". Je définis maintenant ma session de travail.
+
+```{r}
+setwd("/Users/mathildeschwoerer/Documents/Humanités Numériques/Clustering_Tertullien")
+```
+
+```{r}
+setwd
+```
+ J'installe les librairies "stylo" et "filestrings".
+
+```{r}
+if(!require("stylo")){
+  install.packages("stylo")
+  library(stylo)
+}
+if(!require("filesstrings")){
+  install.packages("filesstrings")
+  library(filesstrings)
+}
+```
+
+On lance le package 'stylo'. 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+stylo()
+```
+
+```{r}
+##Debug
+#En cas de message d'erreur plus bas "[tcl] named font "myDefaultFont" already exists", exécuter cette cellule. 
+#library(tcltk2)
+#.Tcl("font delete myDefaultFont")
+```
+
+On paramètre le *graphical user interface* pour l'adapter au latin. Nous allons utiliser la distance cosine appliquée à des trigrammes de caractères (configurés manuellement dans le GUI). On incrémente de 100 mots les plus fréquents le calcul des distances. 
+
+```{r}
+stylo(gui=TRUE, corpus.dir = "corpus",
+      corpus.format = "xml.drama", corpus.lang = "Latin",
+      analyzed.features = "c", ngram.size = 3, mfw.min = 200, mfw.max = 1000, mfw.incr=100,
+      analysis.type = "CA", distance.measure = "manhattan",
+      pca.visual.flavour = "classic", save.analysed.features=TRUE,save.analysed.freqs=TRUE,save.distance.tables=TRUE,write.jpg.file=TRUE)
+
+#On prévoit une sauvergarde automatique des résultats. 
+Nom_sous_répertoire="TEST 1"
+A<-list.files()
+for (fichier in A){
+  if (endsWith(fichier, ".txt")){
+    file.move(fichier,paste("./Résultats/",Nom_sous_répertoire),overwrite = TRUE)
+  }
+  if (endsWith(fichier, ".jpg")){
+    file.move(fichier,paste("./Résultats/",Nom_sous_répertoire),overwrite = TRUE)
+  }
+}
+```
+
+
+Nous allons tracer un *consensus tree*, un dendrogramme opérant la synthèse de nos résultats précédents.
+
+```{r, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+stylo(gui=TRUE, corpus.dir = "corpus",
+      corpus.format = "xml.drama", corpus.lang = "Latin",
+      analyzed.features = "c", ngram.size = 3, mfw.min = 100, mfw.max = 1000, mfw.incr=100,
+      analysis.type = "BCT", consensus.strength = 0.5,  distance.measure = "manhattan",
+      pca.visual.flavour = "classic")
+```
+
+```{r, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+stylo(gui=TRUE, corpus.dir = "corpus",
+      corpus.format = "xml.drama", corpus.lang = "Latin",
+      analyzed.features = "c", ngram.size = 3, mfw.min = 100, mfw.max = 1000, mfw.incr=100,
+      analysis.type = "BCT", consensus.strength = 0.5,  distance.measure = "cos",
+      pca.visual.flavour = "classic")
+```
+
+On utilise maintenant le delta de Burrows pour produire le consensus tree. 
+
+```{r, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+stylo(gui=FALSE, corpus.dir = "corpus",
+      corpus.format = "xml.drama", corpus.lang = "Latin",
+      analyzed.features = "c", ngram.size = 3, mfw.min = 100, mfw.max = 1000, mfw.incr=100,
+      analysis.type = "BCT", consensus.strength = 0.5,  distance.measure = "delta",
+      pca.visual.flavour = "classic")
+```
+
+```{r, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+stylo(gui=FALSE, corpus.dir = "corpus",
+      corpus.format = "xml.drama", corpus.lang = "Latin",
+      analyzed.features = "c", ngram.size = 3, mfw.min = 100, mfw.max = 1000, mfw.incr=100,
+      analysis.type = "BCT", consensus.strength = 0.5,  distance.measure = "wurzburg",
+      pca.visual.flavour = "classic")
+```
+
+
+Si on augmente drastiquement le nombre de mfw utilisés, le résultat est plus net. 
+Voici le résultat avec la métrique de Würzburg : 
+```{r, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+resultats <- stylo(gui=TRUE, corpus.dir = "corpus",
+      corpus.format = "xml.drama", corpus.lang = "French",
+      analyzed.features = "c", ngram.size = 3, mfw.min =5000, mfw.max = 100, mfw.incr=100,
+      analysis.type = "CA", distance.measure = "wurzburg",
+      pca.visual.flavour = "classic")
+```
+
+On affiche la colonne des features dans notre dataframe "resultats". Elle établit la liste des trigrammes par ordre de fréquence dans notre corpus.
+
+```{r}
+resultats$features
+```
+
+On peut afficher lesdites fréquences des mots trigrammes correspondants : 
+```{r}
+resultats$table.with.all.freqs
+```
+
+La distance séparant chacun des textes qui forment le corpus est également possible : 
+
+```{r}
+resultats$distance.table 
+```
+Multidimensional scaling 
+
+```{r, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+stylo(gui=TRUE, corpus.dir = "corpus",
+      corpus.format = "xml.drama", corpus.lang = "French",
+      analyzed.features = "c", ngram.size = 3, mfw.min = 1000, mfw.max = 100, mfw.incr=100,
+      analysis.type = "MDS",  distance.measure = "wurzburg",
+      pca.visual.flavour = "classic")
+```
+
+On peut aussi produire un réseau mouvant pour mieux représenter les données.
+
+```{r}
+if(!require("networkD3")){
+  install.packages("networkD3")
+  library("networkD3")
+}
+```
+
+
+```{r, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+stylo.network(gui=TRUE, corpus.dir = "corpus",
+              corpus.format = "xml.drama", corpus.lang = "French",
+              analyzed.features = "c", ngram.size = 3, mfw.min = 1700, mfw.max = 100, mfw.incr=100,
+              analysis.type = "CA", distance.measure = "wurzburg",
+              pca.visual.flavour = "classic")
+```
+

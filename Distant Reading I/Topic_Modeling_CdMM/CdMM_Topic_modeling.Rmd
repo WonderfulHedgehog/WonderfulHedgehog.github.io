@@ -1,0 +1,249 @@
+---
+title: "NLP-CdMM"
+author: "Mathilde"
+date: "2023-01-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+I - Préparation des données 
+
+1. Je définis ma session de travail
+
+```{r}
+setwd("~/Documents/GitHub/Distant Reading I/Cours_03")
+monDossier="~/Users/mathildeschwoerer/Documents/GitHub/Distant Reading I/Cours_03/CdMM_NLP"
+```
+
+2. J'importe ma propre liste de _stopwords_.
+
+````{r}
+StopW <- "StopwordsLatin.txt"
+StopW = read.csv(StopW, header=FALSE, stringsAsFactors=FALSE)[,]
+head(StopW,10)
+```
+
+3. Nettoyage du texte
+
+
+````{r}
+df <- read.csv("cdmm.csv", sep=",")
+#On crée une chaîne de caractère vide qui contiendra à l'avenir  le texte contenu dans df. 
+texte_long <- ""
+```
+
+Puisqu'il est possible que ma liste de Stopwords contienne des majuscules malgré ma viligance, je m'assure de tout transformer en minuscules à l'aide d'une fonction. 
+
+````{r}
+StopW <- tolower(StopW)
+```
+
+J'applique la réduction à la minuscule à chaque mot de mon tableau à l'aide d'une boucle. Si le mot ne figure pas dans ma liste de stopwords, je l'ajoute à la chaîne de caractère nommée "texte_long" . Je le débarrasse également de la ponctuation encombrante.
+
+````{r}
+for (word in tolower(df$lemma)) {
+  if (!word %in% StopW) {
+    texte_long <- paste(texte_long, word, sep=" ")
+  }
+  #On enlève la ponctuation.
+  texte_long <- gsub("[[:punct:]]", "", texte_long)
+}
+texte_long
+```
+4. Création d'une liste
+
+Je sectionne ce texte en 10 morceaux et je les mets dans une liste qui s'appelle "extraits".
+
+```{r}
+Nb_sequences <- 10
+extraits <- strwrap(texte_long, nchar(texte_long) / Nb_sequences)
+#J'affiche le huitième extrait.
+extraits[8]
+```
+
+5. Transformation en matrice vectorielle
+
+```{r}
+#J'appelle deux boîtes à outils qui nous seront utiles.
+library("tm")
+library("tidytext")
+
+corpus <- Corpus(VectorSource(extraits), readerControl = list(language = "lat"))
+# J'affiche les informations à propos de ce corpus
+corpus
+```
+Je compte le nombre de colonne de la matrice.
+
+```{r}
+ncol(as.matrix(DocumentTermMatrix(corpus)))
+#Affichage du quatrième vecteur de la matrice.
+corpus[[4]][[1]]
+```
+6. Création d'un _document term matrix_
+
+```{r}
+dtmCdMM <- DocumentTermMatrix(corpus)
+dtmCdMM
+```
+II - Analyse des données 
+
+1. Connaissance des fréquences 
+```{r}
+freq <- as.data.frame(colSums(as.matrix(dtmCdMM)))
+colnames(freq) <- c("frequence")
+#Pour générer un graph, nous avons besoin de la library suivante :
+library("ggplot2")
+#Génération du graph :
+ggplot(freq, aes(x=frequence)) + geom_density()
+```
+
+Afin de mieux comprendre la constitution de mes données, je m'intéresse aux mots peu fréquents. Comme mon texte ne comprend que 740 documents, je pose l'hypothèse de considérer comme rares les mots qu'on trouve moins de deux fois. 
+
+```{r}
+#Création d'une variable repérant les mots qui n'apparaissent qu'une seule fois.
+motsPeuFrequents <- findFreqTerms(dtmCdMM, 0, 1)
+#On compte le nombre de mots concernés.
+length(motsPeuFrequents)
+#On affiche les cinquante premiers. 
+head(motsPeuFrequents,50)
+```
+
+J'agis de même avec les mots fréquents, ceux qui apparaissent deux fois ou plus.
+
+```{r}
+motsFrequents <- findFreqTerms(dtmCdMM, 2, Inf)
+length(motsFrequents)
+head(motsFrequents,50)
+```
+Considérant que le nombre total de mots n'est pas suffisant pour me permettre de faire un grand ménage, je n'applique pas cette étape proposée par mon enseignant dans le script qui me sert d'appui. 
+
+2. Topic modeling
+
+```{r}
+#Appel à une library spécialisée pour le topic-modeling.
+library("topicmodels")
+#On commence par tenter de dégager deux sujets...
+k = 2
+lda_2 <- LDA(dtmCdMM, k= k, control = list(seed = 1234))
+#Puis trois. 
+lda_3 <- LDA(dtmCdMM, k= k+1, control = list(alpha = 0.1))
+```
+
+On calcule le "beta" de chaque mot (voir Documentation).
+
+```{r}
+themes <- tidy(lda_2, matrix = "beta")
+themes
+```
+On mobilise aussi l'échantillonnage de Gibbs qui repose sur un fonctionnemment itératif. Il faut définir ses paramètres (nous conservons ceux de notre enseignant ainsi que ses commentaires).
+
+```{r}
+## Set parameters for Gibbs sampling
+#Le modèle va tourner 2000 fois avant de commencer à enregistrer les résultats.
+burnin <- 2000
+#Après cela il va encore tourner 2000 fois.
+iter <- 2000
+# Il ne va enregistrer le résultat que toutes les 500 itérations.
+thin <- 500
+#seed et nstart pour la reproductibilité
+SEED=c(1, 2, 3, 4, 5)
+seed <-SEED
+nstart <- 5
+#Seul meilleur modèle est utilisé.
+best <- TRUE
+#2 topics
+lda_gibbs_2 <- LDA(dtmCdMM, k, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+#3 topics
+lda_gibbs_3 <- LDA(dtmCdMM, k+1, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+```
+
+On crée des dataframes pour rendre compte des opérations statistiques effectuées.
+
+```{r}
+"LDA 2"
+termsTopic <- as.data.frame(terms(lda_2,10))
+head(termsTopic,11)
+"LDA 3"
+termsTopic <- as.data.frame(terms(lda_3,10))
+head(termsTopic,11)
+"LDA GIBBS 2"
+termsTopic <- as.data.frame(terms(lda_gibbs_2,10))
+head(termsTopic,11)
+#Ce dataframe nous paraît le plus représentatif du poème analysé, aussi générons-nous un code pour l'intégrer à notre rapport LaTeX.
+library(xtable)
+print(xtable(termsTopic, type = "latex"), file = "LDAGibbs2.tex")
+"LDA GIBBS 3"
+termsTopic <- as.data.frame(terms(lda_gibbs_3,10))
+head(termsTopic,11)
+```
+
+On associe les résultats du modèle de Gibbs à leur beta.
+
+```{r}
+topics <- tidy(lda_gibbs_2, matrix = "beta")
+topics
+```
+
+III - Visualisation
+
+```{r}
+#Je vais solliciter une nouvelle bibliothèque d'outils.
+if (!require("dplyr")){
+   install.packages("dplyr")
+  library("dplyr")
+}
+
+#Je récupère mes mots.
+top_terms <- topics %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup()  %>%
+  arrange(topic, -beta)
+#J'élabore un graph.
+top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) + geom_col(show.legend = FALSE) +
+                                                  facet_wrap(~ topic, scales = "free") +
+                                                  coord_flip() +
+                                                  scale_x_reordered()
+```
+
+On récupère les mots pour les associer à leur 𝛃.
+
+```{r, fig.width=20, fig.height=20}
+tm <- posterior(lda_gibbs_2)$terms
+data = data.frame(colnames(tm))
+head(data)
+```
+On crée un nuage de mots pour chaque thème dégagé.
+
+```{r, fig.width=30, fig.height=20}
+#On appelle les boîtes à outils requises.
+library("wordcloud")
+library("RColorBrewer")
+library("wordcloud2")
+
+#On définit les paramètres des nuages de mots.
+for(topic in seq(k)){
+    data$topic <-tm[topic,]
+    wordcloud(
+      words = data$colnames.tm.,
+      freq = data$topic,
+      #Fréquence minimale que doit justifier le mot pour être affiché.
+      min.freq=0.0002,
+      #Nombre maximal de mots contenus dans chaque wordcloud.
+      max.words=30,
+      #On les classe par ordre croissant. 
+      random.order=FALSE,
+      #Proportion de mots écrits à 90%.
+      rot.per=.35,
+      #Taille du graphique.
+      scale=c(10,10),
+      #Palette de couleurs.
+      colors = brewer.pal(5, "Set1")
+    )
+}
+```

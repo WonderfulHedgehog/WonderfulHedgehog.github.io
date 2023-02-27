@@ -33,6 +33,9 @@ Le dossier intitulé Distant Reading I comporte le rapport de l'ensemble des tra
 
   
 ## Numérisation du patrimoine I
+
+Outre le rapport commentant les travaux, on y trouvera : 
+
 ### Galerie_auteurs_latins
 
 - un fichier .css ; 
